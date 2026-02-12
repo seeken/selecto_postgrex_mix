@@ -80,7 +80,7 @@ defmodule SelectoPostgrexMix.OverlayGenerator do
   # Private helper functions
 
   defp generate_redaction_example(config) do
-    columns = get_in(config, [:source, :columns]) || config[:columns] || %{}
+    columns = extract_columns(config)
 
     sensitive_fields =
       columns
@@ -105,7 +105,7 @@ defmodule SelectoPostgrexMix.OverlayGenerator do
   end
 
   defp generate_column_examples_dsl(config) do
-    columns = get_in(config, [:source, :columns]) || config[:columns] || %{}
+    columns = extract_columns(config)
 
     examples =
       columns
@@ -129,7 +129,7 @@ defmodule SelectoPostgrexMix.OverlayGenerator do
   end
 
   defp generate_column_example_dsl(field_name, column_config) do
-    type = Map.get(column_config, :type, :string)
+    type = column_type(column_config, %{})
 
     case type do
       :decimal ->
@@ -170,30 +170,41 @@ defmodule SelectoPostgrexMix.OverlayGenerator do
   end
 
   defp generate_filter_examples_dsl(config) do
-    columns = get_in(config, [:source, :columns]) || config[:columns] || %{}
+    columns = extract_columns(config)
 
     example_field =
       columns
       |> Enum.find(fn {_field, col_config} ->
-        Map.get(col_config, :type) in [:string, :integer, :decimal, :boolean]
+        column_type(col_config, columns) in [:string, :integer, :decimal, :boolean]
       end)
 
     case example_field do
-      {field_name, %{type: :string}} ->
-        """
-          # deffilter "#{field_name}_search" do
-          #   name "Search #{humanize(field_name)}"
-          #   type :string
-          # end
-        """
+      {field_name, col_config} ->
+        case column_type(col_config, columns) do
+          :string ->
+            """
+              # deffilter "#{field_name}_search" do
+              #   name "Search #{humanize(field_name)}"
+              #   type :string
+              # end
+            """
 
-      {field_name, %{type: type}} when type in [:integer, :decimal] ->
-        """
-          # deffilter "#{field_name}_range" do
-          #   name "#{humanize(field_name)} Range"
-          #   type :string
-          # end
-        """
+          type when type in [:integer, :decimal] ->
+            """
+              # deffilter "#{field_name}_range" do
+              #   name "#{humanize(field_name)} Range"
+              #   type :string
+              # end
+            """
+
+          _ ->
+            """
+              # deffilter "custom_filter" do
+              #   name "Custom Filter"
+              #   type :string
+              # end
+            """
+        end
 
       _ ->
         """
@@ -216,12 +227,13 @@ defmodule SelectoPostgrexMix.OverlayGenerator do
   end
 
   defp generate_jsonb_schema_examples(config) do
-    columns = get_in(config, [:source, :columns]) || config[:field_types] || %{}
+    columns = extract_columns(config)
+    field_types = extract_field_types(config)
 
     jsonb_columns =
-      columns
-      |> Enum.filter(fn {_field, col_config} ->
-        type = if is_map(col_config), do: Map.get(col_config, :type), else: col_config
+      field_types
+      |> Enum.filter(fn {_field, col_type} ->
+        type = column_type(col_type, columns)
         type in [:jsonb, :map]
       end)
       |> Enum.map(fn {field_name, _} -> field_name end)
@@ -253,4 +265,38 @@ defmodule SelectoPostgrexMix.OverlayGenerator do
     """
     |> String.trim_trailing()
   end
+
+  defp extract_columns(config) when is_map(config) do
+    source_columns =
+      case Map.get(config, :source) do
+        source when is_map(source) -> Map.get(source, :columns)
+        _ -> nil
+      end
+
+    source_columns || Map.get(config, :columns) || %{}
+  end
+
+  defp extract_columns(_), do: %{}
+
+  defp extract_field_types(config) when is_map(config) do
+    Map.get(config, :field_types) || %{}
+  end
+
+  defp extract_field_types(_), do: %{}
+
+  defp column_type(col_type, _columns) when is_atom(col_type), do: col_type
+
+  defp column_type(col_type, _columns) when is_map(col_type) do
+    Map.get(col_type, :type) || Map.get(col_type, "type") || :string
+  end
+
+  defp column_type(field_name, columns) when is_atom(field_name) do
+    case Map.get(columns, field_name) do
+      %{type: type} -> type
+      type when is_atom(type) -> type
+      _ -> :string
+    end
+  end
+
+  defp column_type(_other, _columns), do: :string
 end

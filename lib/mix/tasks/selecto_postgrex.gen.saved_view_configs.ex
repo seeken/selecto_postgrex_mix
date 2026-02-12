@@ -164,12 +164,12 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.SavedViewConfigs do
       \"\"\"
 
       defmacro __using__(_opts \\\\ []) do
-        conn_name = unquote(Module.concat([config.connection_name]))
-        table = unquote(config.table_name)
+        conn_name = #{config.connection_name}
+        table = #{inspect(config.table_name)}
 
-        quote do
-          @view_config_conn unquote(conn_name)
-          @view_config_table unquote(table)
+        quote bind_quoted: [conn_name: conn_name, table: table] do
+          @view_config_conn conn_name
+          @view_config_table table
 
           @doc \"\"\"
           Get a saved view configuration by name, context, and view type.

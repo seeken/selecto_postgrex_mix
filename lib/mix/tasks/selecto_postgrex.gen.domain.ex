@@ -287,6 +287,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     igniter_with_domain =
       igniter
       |> ensure_directory_exists(output_dir)
+      |> remove_legacy_duplicate_files(table, output_dir, domain_file)
       |> generate_domain_file(table, domain_file, conn_opts, pg_schema, opts)
       |> generate_overlay_file(table, domain_file, conn_opts, pg_schema, opts)
       |> add_connection_setup_notice(opts)
@@ -303,6 +304,33 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     Path.join([output_dir, "#{filename}_domain.ex"])
   end
 
+  defp remove_legacy_duplicate_files(igniter, table, output_dir, current_domain_file) do
+    legacy_basename =
+      table
+      |> SelectoPostgrexMix.Introspector.Postgres.table_name_to_module()
+      |> Macro.underscore()
+
+    legacy_domain_file = Path.join([output_dir, "#{legacy_basename}_domain.ex"])
+
+    igniter =
+      if legacy_domain_file != current_domain_file and File.exists?(legacy_domain_file) do
+        File.rm!(legacy_domain_file)
+        igniter
+      else
+        igniter
+      end
+
+    current_overlay_file = OverlayGenerator.overlay_file_path(current_domain_file)
+    legacy_overlay_file = OverlayGenerator.overlay_file_path(legacy_domain_file)
+
+    if legacy_overlay_file != current_overlay_file and File.exists?(legacy_overlay_file) do
+      File.rm!(legacy_overlay_file)
+      igniter
+    else
+      igniter
+    end
+  end
+
   defp ensure_directory_exists(igniter, dir_path) do
     gitkeep_path = Path.join(dir_path, ".gitkeep")
 
@@ -315,8 +343,10 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   defp generate_domain_file(igniter, table, file_path, conn_opts, pg_schema, opts) do
     existing_content = read_existing_file(file_path)
+    app_name = get_app_name(igniter) |> to_string() |> Macro.camelize()
+    gen_opts = opts |> Map.put(:app_name, app_name) |> Map.to_list()
 
-    config =
+    content =
       Connection.with_connection(conn_opts, fn conn ->
         introspect_opts = [
           schema: pg_schema,
@@ -325,14 +355,14 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
         config = SchemaIntrospector.introspect_schema(conn, table, introspect_opts)
 
-        # Add expand schemas and modes
         config =
           if opts[:expand_schemas_list] do
-            config
-            |> Map.put(:expand_schemas_list, opts[:expand_schemas_list])
+            Map.put(config, :expand_schemas_list, opts[:expand_schemas_list])
           else
             config
           end
+
+        config = Map.put(config, :expand, opts[:expand] || false)
 
         config =
           if opts[:expand_modes] && map_size(opts[:expand_modes]) > 0 do
@@ -341,27 +371,21 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
             config
           end
 
-        # Add connection info for schema expansion
-        config
-        |> Map.put(:conn, conn)
-        |> Map.put(:pg_schema, pg_schema)
+        # Keep connection alive for schema expansion while generating file content.
+        config =
+          config
+          |> Map.put(:conn, conn)
+          |> Map.put(:pg_schema, pg_schema)
+
+        merged_config =
+          if opts[:force] do
+            config
+          else
+            ConfigMerger.merge_with_existing(config, existing_content)
+          end
+
+        DomainGenerator.generate_domain_file(table, merged_config, gen_opts)
       end)
-
-    merged_config =
-      if opts[:force] do
-        config
-      else
-        ConfigMerger.merge_with_existing(config, existing_content)
-      end
-
-    app_name = get_app_name(igniter)
-
-    gen_opts =
-      opts
-      |> Map.put(:app_name, app_name)
-      |> Map.to_list()
-
-    content = DomainGenerator.generate_domain_file(table, merged_config, gen_opts)
 
     if File.exists?(file_path) do
       File.rm!(file_path)
@@ -381,7 +405,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
           SchemaIntrospector.introspect_schema(conn, table, schema: pg_schema)
         end)
 
-      app_name = get_app_name(igniter)
+      app_name = get_app_name(igniter) |> to_string() |> Macro.camelize()
       module_name = Macro.camelize(SelectoPostgrexMix.Introspector.Postgres.table_name_to_module(table))
       domain_module_name = "#{app_name}.SelectoDomains.#{module_name}Domain"
 

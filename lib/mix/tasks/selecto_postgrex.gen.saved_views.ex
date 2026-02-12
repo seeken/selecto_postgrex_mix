@@ -150,14 +150,14 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.SavedViews do
       \"\"\"
 
       defmacro __using__(_opts \\\\ []) do
-        conn_name = unquote(Module.concat([config.connection_name]))
-        table = unquote(config.table_name)
+        conn_name = #{config.connection_name}
+        table = #{inspect(config.table_name)}
 
-        quote do
+        quote bind_quoted: [conn_name: conn_name, table: table] do
           @behaviour SelectoComponents.SavedViews
 
-          @saved_views_conn unquote(conn_name)
-          @saved_views_table unquote(table)
+          @saved_views_conn conn_name
+          @saved_views_table table
 
           def get_view(name, context) do
             query = "SELECT id, name, context, params, inserted_at, updated_at FROM \#{@saved_views_table} WHERE context = $1 AND name = $2"

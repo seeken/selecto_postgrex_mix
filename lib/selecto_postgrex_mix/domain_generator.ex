@@ -118,12 +118,12 @@ defmodule SelectoPostgrexMix.DomainGenerator do
       config[:metadata][:module_name] ||
         SelectoPostgrexMix.Introspector.Postgres.table_name_to_module(table_name)
 
-    app_name = opts[:app_name] || "MyApp"
+    app_name = normalize_app_name(opts[:app_name] || "MyApp")
     "#{app_name}.SelectoDomains.#{base_name}Domain"
   end
 
   defp infer_connection_name(opts) do
-    app_name = opts[:app_name] || "MyApp"
+    app_name = normalize_app_name(opts[:app_name] || "MyApp")
     "#{app_name}.Database"
   end
 
@@ -280,7 +280,7 @@ defmodule SelectoPostgrexMix.DomainGenerator do
 
   defp format_association_config(assoc_name, assoc_config) do
     assoc_name_key = inspect(assoc_name)
-    queryable_name = inspect(assoc_config[:queryable] || assoc_name)
+    queryable_name = inspect(resolve_schema_key(assoc_name, assoc_config))
     owner_key = inspect(assoc_config[:owner_key])
     related_key = inspect(assoc_config[:related_key])
 
@@ -307,6 +307,7 @@ defmodule SelectoPostgrexMix.DomainGenerator do
   defp generate_schemas_config(config) do
     associations = config[:associations] || %{}
     expand_schemas_list = config[:expand_schemas_list] || []
+    expand_all = config[:expand] || false
     expand_modes = config[:expand_modes] || %{}
     conn = config[:conn]
     pg_schema = config[:pg_schema] || "public"
@@ -315,9 +316,9 @@ defmodule SelectoPostgrexMix.DomainGenerator do
       associations
       |> Enum.map(fn {_assoc_name, assoc_config} ->
         related_table = assoc_config[:related_table] || to_string(assoc_config[:queryable])
-        schema_name = String.to_atom(Macro.underscore(assoc_config[:related_module_name] || Macro.camelize(related_table)))
+        schema_name = resolve_schema_key(related_table, assoc_config)
 
-        should_expand = should_expand_schema?(schema_name, related_table, expand_schemas_list)
+        should_expand = should_expand_schema?(schema_name, related_table, expand_schemas_list, expand_all)
         join_mode = get_join_mode_for_schema(schema_name, expand_modes)
 
         if should_expand and conn do
@@ -335,7 +336,9 @@ defmodule SelectoPostgrexMix.DomainGenerator do
     end
   end
 
-  defp should_expand_schema?(schema_name, related_table, expand_schemas_list) do
+  defp should_expand_schema?(_schema_name, _related_table, _expand_schemas_list, true), do: true
+
+  defp should_expand_schema?(schema_name, related_table, expand_schemas_list, false) do
     schema_name_str = to_string(schema_name)
     related_table_str = to_string(related_table)
 
@@ -509,7 +512,7 @@ defmodule SelectoPostgrexMix.DomainGenerator do
   defp format_single_join(join_name, join_config) do
     join_type = inspect(Map.get(join_config, :join_type, :left))
     join_name_str = humanize_name(join_name)
-    source_val = inspect(join_config[:queryable] || join_name)
+    source_val = inspect(resolve_schema_key(join_name, join_config))
     owner_key = join_config[:owner_key] || :id
     related_key = join_config[:related_key] || :id
 
@@ -588,13 +591,42 @@ defmodule SelectoPostgrexMix.DomainGenerator do
 
   defp generate_saved_views_use(opts) do
     if opts[:saved_views] do
-      app_name = opts[:app_name] || "MyApp"
+      app_name = normalize_app_name(opts[:app_name] || "MyApp")
       saved_view_context = "#{app_name}.SavedViewContext"
       "\n      use #{saved_view_context}\n"
     else
       ""
     end
   end
+
+  defp resolve_schema_key(default_name, assoc_config) when is_map(assoc_config) do
+    case assoc_config[:related_module_name] do
+      module_name when is_binary(module_name) ->
+        module_name |> Macro.underscore() |> String.to_atom()
+
+      module_name when is_atom(module_name) ->
+        module_name |> to_string() |> Macro.underscore() |> String.to_atom()
+
+      _ ->
+        default_name |> to_string() |> String.to_atom()
+    end
+  end
+
+  defp normalize_app_name(app_name) when is_atom(app_name) do
+    app_name
+    |> Atom.to_string()
+    |> Macro.camelize()
+  end
+
+  defp normalize_app_name(app_name) when is_binary(app_name) do
+    if String.contains?(app_name, ".") do
+      app_name
+    else
+      Macro.camelize(app_name)
+    end
+  end
+
+  defp normalize_app_name(app_name), do: app_name |> to_string() |> Macro.camelize()
 
   defp humanize_name(atom) when is_atom(atom) do
     atom

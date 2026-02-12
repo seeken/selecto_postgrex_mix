@@ -94,12 +94,18 @@ defmodule SelectoPostgrexMix.Connection do
   def connect(opts \\ []) do
     conn_opts = resolve_connection_opts(opts)
 
-    case Postgrex.start_link(conn_opts) do
-      {:ok, pid} ->
-        {:ok, pid}
+    case Application.ensure_all_started(:postgrex) do
+      {:ok, _started_apps} ->
+        case Postgrex.start_link(conn_opts) do
+          {:ok, pid} ->
+            {:ok, pid}
+
+          {:error, reason} ->
+            {:error, {:connection_failed, reason}}
+        end
 
       {:error, reason} ->
-        {:error, {:connection_failed, reason}}
+        {:error, {:postgrex_start_failed, reason}}
     end
   end
 
