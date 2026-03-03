@@ -26,12 +26,16 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
   ## Options
 
     * `--timeout` - Default query timeout in milliseconds (default: 30000)
+    * `--test-timeout` - Test query timeout in milliseconds (default: 15000)
     * `--pool-size` - Connection pool size (default: 10)
     * `--circuit-threshold` - Pool utilization threshold to open circuit (default: 0.9)
     * `--check-interval` - Health check interval in milliseconds (default: 5000)
     * `--connection-name` - Named Postgrex connection (default: APP.Database)
     * `--dry-run` - Show what would be changed without applying
     * `--force` - Overwrite existing QueryTimeoutMonitor module
+    * `--skip-config` - Compatibility flag (Postgrex task prints config instructions only)
+    * `--skip-monitor` - Skip QueryTimeoutMonitor generation
+    * `--skip-supervision` - Compatibility flag (task prints supervision instructions)
 
   ## What Gets Generated
 
@@ -66,12 +70,16 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
       positional: [:app_name],
       schema: [
         timeout: :integer,
+        test_timeout: :integer,
         pool_size: :integer,
         circuit_threshold: :float,
         check_interval: :integer,
         connection_name: :string,
         dry_run: :boolean,
-        force: :boolean
+        force: :boolean,
+        skip_config: :boolean,
+        skip_monitor: :boolean,
+        skip_supervision: :boolean
       ],
       aliases: [
         t: :timeout,
@@ -80,11 +88,15 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
       ],
       defaults: [
         timeout: 30_000,
+        test_timeout: 15_000,
         pool_size: 10,
         circuit_threshold: 0.9,
         check_interval: 5_000,
         dry_run: false,
-        force: false
+        force: false,
+        skip_config: false,
+        skip_monitor: false,
+        skip_supervision: false
       ]
     }
   end
@@ -107,14 +119,15 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
 
   defp generate(igniter, app_name, opts) do
     config = build_config(app_name, opts)
+    igniter = add_compatibility_notices(igniter, opts)
 
     if opts[:dry_run] do
       show_dry_run(config)
       igniter
     else
       igniter
-      |> generate_monitor(config)
-      |> add_success_messages(config)
+      |> maybe_generate_monitor(config, opts)
+      |> add_success_messages(config, opts)
     end
   end
 
@@ -124,6 +137,7 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
       app_underscore: Macro.underscore(app_name),
       connection_name: opts[:connection_name] || "#{app_name}.Database",
       timeout: opts[:timeout] || 30_000,
+      test_timeout: opts[:test_timeout] || 15_000,
       pool_size: opts[:pool_size] || 10,
       circuit_threshold: opts[:circuit_threshold] || 0.9,
       check_interval: opts[:check_interval] || 5_000,
@@ -142,6 +156,7 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
 
     Configuration:
       * Query timeout: #{config.timeout}ms
+      * Test timeout: #{config.test_timeout}ms
       * Pool size: #{config.pool_size}
       * Circuit breaker threshold: #{Float.round(config.circuit_threshold * 100, 1)}%
       * Check interval: #{config.check_interval}ms
@@ -149,6 +164,29 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
 
     Run without --dry-run to generate files.
     """)
+  end
+
+  defp add_compatibility_notices(igniter, opts) do
+    igniter
+    |> maybe_add_notice(
+      opts[:skip_config],
+      "--skip-config has no effect in Postgrex mode (config is not edited automatically)"
+    )
+    |> maybe_add_notice(
+      opts[:skip_supervision],
+      "--skip-supervision has no effect in Postgrex mode (supervision is not edited automatically)"
+    )
+  end
+
+  defp maybe_add_notice(igniter, true, message), do: Igniter.add_notice(igniter, message)
+  defp maybe_add_notice(igniter, _flag, _message), do: igniter
+
+  defp maybe_generate_monitor(igniter, config, opts) do
+    if opts[:skip_monitor] do
+      Igniter.add_notice(igniter, "Skipped QueryTimeoutMonitor generation (--skip-monitor)")
+    else
+      generate_monitor(igniter, config)
+    end
   end
 
   defp generate_monitor(igniter, config) do
@@ -372,9 +410,18 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
     end
   end
 
-  defp add_success_messages(igniter, config) do
+  defp add_success_messages(igniter, config, opts) do
+    igniter =
+      if opts[:skip_monitor] do
+        igniter
+      else
+        Igniter.add_notice(
+          igniter,
+          "Generated: lib/#{config.app_underscore}/query_timeout_monitor.ex"
+        )
+      end
+
     igniter
-    |> Igniter.add_notice("Generated: lib/#{config.app_underscore}/query_timeout_monitor.ex")
     |> Igniter.add_notice("""
 
     Query timeout defense system generated!
@@ -405,6 +452,7 @@ defmodule Mix.Tasks.SelectoPostgrex.AddTimeouts do
     ## Environment Variables (Production)
 
         export QUERY_TIMEOUT=#{config.timeout}
+        export TEST_QUERY_TIMEOUT=#{config.test_timeout}
         export STATEMENT_TIMEOUT=#{config.timeout}
         export POOL_SIZE=#{config.pool_size}
 

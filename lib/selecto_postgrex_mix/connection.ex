@@ -45,7 +45,9 @@ defmodule SelectoPostgrexMix.Connection do
 
     {username, password} =
       case uri.userinfo do
-        nil -> {nil, nil}
+        nil ->
+          {nil, nil}
+
         info ->
           case String.split(info, ":", parts: 2) do
             [user] -> {user, nil}

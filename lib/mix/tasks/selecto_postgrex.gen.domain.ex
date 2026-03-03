@@ -24,6 +24,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
     * `--table` - Table name to generate domain for (required unless --all)
     * `--all` - Generate domains for all tables in the database
+    * `--exclude` - Comma-separated list of tables to exclude
     * `--database-url` - PostgreSQL connection URL
     * `--host` - Database hostname (default: localhost)
     * `--port` - Database port (default: 5432)
@@ -32,11 +33,14 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     * `--password` - Database password
     * `--connection-name` - Named Postgrex connection for generated code (default: AppName.Database)
     * `--schema` - PostgreSQL schema to introspect (default: public)
+    * `--include-associations` - Include FK associations as joins (default: true)
     * `--expand` - Include reverse FK associations (has_many, many_to_many)
     * `--expand-schemas` - Comma-separated list of related tables to fully expand
     * `--expand-tag` - Tag mode: TableName:display_field
     * `--expand-star` - Star schema mode: TableName:display_field
     * `--expand-lookup` - Lookup mode: TableName:display_field
+    * `--expand-polymorphic` - Polymorphic association: field_name:type_field,id_field:Type1,Type2,Type3
+    * `--parameterized-joins` - Add guidance notice for parameterized joins workflow
     * `--live` - Generate LiveView files
     * `--saved-views` - Generate saved views support (requires --live)
     * `--path` - Custom route path for LiveView
@@ -70,9 +74,11 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
         [
           table: :string,
           all: :boolean,
+          exclude: :string,
           output: :string,
           force: :boolean,
           dry_run: :boolean,
+          include_associations: :boolean,
           live: :boolean,
           saved_views: :boolean,
           expand: :boolean,
@@ -80,6 +86,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
           expand_tag: :keep,
           expand_star: :keep,
           expand_lookup: :keep,
+          expand_polymorphic: :keep,
           parameterized_joins: :boolean,
           path: :string,
           enable_modal: :boolean
@@ -88,6 +95,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
         [
           t: :table,
           a: :all,
+          x: :exclude,
           o: :output,
           f: :force,
           d: :dry_run,
@@ -101,7 +109,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
   @impl Igniter.Mix.Task
   def igniter(igniter) do
     options = igniter.args.options
-    parsed_args = Map.new(options)
+    parsed_args = Map.new(options) |> Map.put_new(:include_associations, true)
 
     # Parse expand modes
     expand_modes = parse_expand_modes(parsed_args)
@@ -114,6 +122,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
     conn_opts = ConnectionOpts.from_parsed_args(parsed_args)
     pg_schema = parsed_args[:schema] || "public"
+    exclude_patterns = parse_exclude_patterns(parsed_args[:exclude] || "")
 
     tables =
       cond do
@@ -126,6 +135,8 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
         true ->
           []
       end
+
+    tables = Enum.reject(tables, &table_matches_exclude?(&1, exclude_patterns))
 
     if Enum.empty?(tables) do
       Igniter.add_warning(igniter, """
@@ -189,8 +200,25 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   defp parse_expand_schemas(_), do: []
 
+  defp parse_exclude_patterns(exclude_arg) when is_binary(exclude_arg) do
+    exclude_arg
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp parse_exclude_patterns(_), do: []
+
+  defp table_matches_exclude?(table_name, exclude_patterns) do
+    table_name = String.downcase(to_string(table_name))
+
+    Enum.any?(exclude_patterns, fn pattern ->
+      String.contains?(table_name, String.downcase(pattern))
+    end)
+  end
+
   defp parse_expand_modes(parsed_args) do
-    modes = [:expand_tag, :expand_star, :expand_lookup]
+    modes = [:expand_tag, :expand_star, :expand_lookup, :expand_polymorphic]
 
     Enum.reduce(modes, %{}, fn mode, acc ->
       mode_type = mode |> to_string() |> String.replace("expand_", "") |> String.to_atom()
@@ -214,12 +242,39 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
   end
 
   defp parse_expand_mode_spec(spec, mode_type, acc) do
-    case String.split(spec, ":") do
-      [table_name, display_field] ->
-        Map.put(acc, String.trim(table_name), {mode_type, String.trim(display_field)})
+    cond do
+      mode_type == :polymorphic ->
+        case String.split(spec, ":") do
+          [field_name, fields, types] ->
+            case String.split(fields, ",") do
+              [type_field, id_field] ->
+                entity_types = String.split(types, ",") |> Enum.map(&String.trim/1)
 
-      _ ->
-        acc
+                poly_config = %{
+                  field_name: String.trim(field_name),
+                  type_field: String.trim(type_field),
+                  id_field: String.trim(id_field),
+                  entity_types: entity_types
+                }
+
+                Map.put(acc, String.trim(field_name), {:polymorphic, poly_config})
+
+              _ ->
+                acc
+            end
+
+          _ ->
+            acc
+        end
+
+      true ->
+        case String.split(spec, ":") do
+          [table_name, display_field] ->
+            Map.put(acc, String.trim(table_name), {mode_type, String.trim(display_field)})
+
+          _ ->
+            acc
+        end
     end
   end
 
@@ -234,6 +289,16 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
       igniter =
         if opts[:saved_views] do
           generate_saved_views_if_needed(igniter, opts)
+        else
+          igniter
+        end
+
+      igniter =
+        if opts[:parameterized_joins] do
+          Igniter.add_notice(
+            igniter,
+            "Parameterized joins enabled: use mix selecto_postgrex.gen.parameterized_join to scaffold join templates"
+          )
         else
           igniter
         end
@@ -262,10 +327,12 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     ============================================
 
     Output directory: #{output_dir}
+    Include associations: #{Map.get(opts, :include_associations, true)}
     Expand associations: #{opts[:expand] || false}
     Force overwrite: #{opts[:force] || false}
     Generate LiveView: #{opts[:live] || false}
     Generate Saved Views: #{opts[:saved_views] || false}
+    Parameterized joins hint: #{opts[:parameterized_joins] || false}
 
     Tables to process:
     """)
@@ -350,6 +417,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
       Connection.with_connection(conn_opts, fn conn ->
         introspect_opts = [
           schema: pg_schema,
+          include_associations: Map.get(opts, :include_associations, true),
           expand: opts[:expand] || false
         ]
 
@@ -402,11 +470,17 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     else
       config =
         Connection.with_connection(conn_opts, fn conn ->
-          SchemaIntrospector.introspect_schema(conn, table, schema: pg_schema)
+          SchemaIntrospector.introspect_schema(conn, table,
+            schema: pg_schema,
+            include_associations: Map.get(opts, :include_associations, true)
+          )
         end)
 
       app_name = get_app_name(igniter) |> to_string() |> Macro.camelize()
-      module_name = Macro.camelize(SelectoPostgrexMix.Introspector.Postgres.table_name_to_module(table))
+
+      module_name =
+        Macro.camelize(SelectoPostgrexMix.Introspector.Postgres.table_name_to_module(table))
+
       domain_module_name = "#{app_name}.SelectoDomains.#{module_name}Domain"
 
       content = OverlayGenerator.generate_overlay_file(domain_module_name, config, opts)

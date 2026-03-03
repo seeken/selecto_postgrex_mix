@@ -17,10 +17,13 @@ defmodule SelectoPostgrexMix do
   - `mix selecto_postgrex.gen.saved_views` - Generate saved views infrastructure
   - `mix selecto_postgrex.gen.filter_sets` - Generate filter sets infrastructure
   - `mix selecto_postgrex.gen.saved_view_configs` - Generate view configs infrastructure
+  - `mix selecto_postgrex.install` - Install Selecto Postgrex dependencies
+  - `mix selecto_postgrex.components.integrate` - Integrate SelectoComponents assets/hooks
+  - `mix selecto_postgrex.gen.live_dashboard` - Generate LiveDashboard metrics page
+  - `mix selecto_postgrex.gen.parameterized_join` - Generate parameterized join templates
+  - `mix selecto_postgrex.validate.parameterized_joins` - Validate parameterized join configs
   - `mix selecto_postgrex.setup` - Run generated SQL files
   - `mix selecto_postgrex.add_timeouts` - Configure query timeouts
-  - `mix selecto_postgrex.gen.cone` - Generate hierarchical LiveView
-  - `mix selecto_postgrex.gen.cone.pg` - Generate hierarchical LiveView (Phoenix Playground)
 
   ## Getting Started
 
@@ -37,7 +40,21 @@ defmodule SelectoPostgrexMix do
   Get the version of SelectoPostgrexMix.
   """
   def version do
-    "0.1.0"
+    Application.spec(:selecto_postgrex_mix, :vsn) |> to_string()
+  end
+
+  @doc """
+  Get configuration for SelectoPostgrexMix.
+  """
+  def config do
+    Application.get_all_env(:selecto_postgrex_mix)
+  end
+
+  @doc """
+  Check if required runtime dependencies are available.
+  """
+  def dependencies_available? do
+    Code.ensure_loaded?(Postgrex) and Code.ensure_loaded?(Selecto)
   end
 
   @doc """

@@ -11,8 +11,11 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.FilterSets do
   ## Options
 
     * `--context-module` - Context module name (default: MyApp.FilterSets)
+    * `--schema-module` - Compatibility option (not used in Postgrex mode)
     * `--table` - Table name (default: filter_sets)
+    * `--repo` - Compatibility option (not used in Postgrex mode)
     * `--connection-name` - Named Postgrex connection (default: MyApp.Database)
+    * `--no-migration` - Skip SQL file generation
     * `--no-tests` - Skip test file generation
 
   ## Generated Files
@@ -27,15 +30,20 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.FilterSets do
   @requirements ["app.config"]
 
   def run(args) do
-    {opts, [app_module | _], _} =
+    {opts, positional, _} =
       OptionParser.parse(args,
         switches: [
           context_module: :string,
+          schema_module: :string,
           table: :string,
+          repo: :string,
           connection_name: :string,
+          migration: :boolean,
           tests: :boolean
         ]
       )
+
+    app_module = List.first(positional)
 
     if is_nil(app_module) do
       Mix.raise("Expected the base module name, got: #{inspect(args)}")
@@ -47,14 +55,22 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.FilterSets do
       app_module: app_module,
       app_name: app_name,
       context_module: opts[:context_module] || "#{app_module}.FilterSets",
+      schema_module: opts[:schema_module],
       table: opts[:table] || "filter_sets",
+      repo: opts[:repo],
       connection_name: opts[:connection_name] || "#{app_module}.Database",
+      migration: Keyword.get(opts, :migration, true),
       tests: Keyword.get(opts, :tests, true)
     }
 
+    maybe_warn_compatibility_options(config)
+
     Mix.shell().info("Generating filter sets implementation for #{app_module}...")
 
-    generate_sql(config)
+    if config.migration do
+      generate_sql(config)
+    end
+
     generate_context(config)
 
     if config.tests do
@@ -364,22 +380,39 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.FilterSets do
   end
 
   defp print_instructions(config) do
+    migration_step =
+      if config.migration do
+        "1. Run the SQL:\n   mix selecto_postgrex.setup\n   (or manually: psql -f priv/sql/create_#{config.table}.sql)"
+      else
+        "1. SQL generation was skipped (--no-migration). Ensure your filter_sets table exists."
+      end
+
     Mix.shell().info("""
 
     Filter sets implementation generated successfully!
 
     Next steps:
 
-    1. Run the SQL:
-       mix selecto_postgrex.setup
-       (or manually: psql -f priv/sql/create_#{config.table}.sql)
+    #{migration_step}
 
     2. Configure the adapter in your LiveView:
 
        def mount(_params, _session, socket) do
          socket = assign(socket, :filter_sets_adapter, #{config.context_module})
          {:ok, socket}
-       end
+        end
     """)
+  end
+
+  defp maybe_warn_compatibility_options(config) do
+    if config.schema_module do
+      Mix.shell().info(
+        "Note: --schema-module is accepted for compatibility but ignored in Postgrex mode"
+      )
+    end
+
+    if config.repo do
+      Mix.shell().info("Note: --repo is accepted for compatibility but ignored in Postgrex mode")
+    end
   end
 end

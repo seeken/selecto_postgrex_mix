@@ -171,10 +171,12 @@ defmodule SelectoPostgrexMix.Introspector.Expand do
 
           Enum.map(other_fks, fn other_fk ->
             assoc_name = String.to_atom(other_fk.foreign_table_name)
-            this_column = case this_fk do
-              [fk | _] -> fk.column_name
-              _ -> :id
-            end
+
+            this_column =
+              case this_fk do
+                [fk | _] -> fk.column_name
+                _ -> :id
+              end
 
             {assoc_name,
              %{

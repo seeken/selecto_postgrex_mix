@@ -144,8 +144,17 @@ defmodule SelectoPostgrexMix.Introspector.Postgres do
       {:ok, %{rows: rows}} ->
         columns =
           rows
-          |> Enum.map(fn [col_name, data_type, udt_name, is_nullable, col_default,
-                          max_length, precision, scale, _position] ->
+          |> Enum.map(fn [
+                           col_name,
+                           data_type,
+                           udt_name,
+                           is_nullable,
+                           col_default,
+                           max_length,
+                           precision,
+                           scale,
+                           _position
+                         ] ->
             %{
               column_name: String.to_atom(col_name),
               data_type: data_type,
@@ -222,8 +231,7 @@ defmodule SelectoPostgrexMix.Introspector.Postgres do
       {:ok, %{rows: rows}} ->
         foreign_keys =
           rows
-          |> Enum.map(fn [constraint_name, col_name, foreign_schema,
-                          foreign_table, foreign_col] ->
+          |> Enum.map(fn [constraint_name, col_name, foreign_schema, foreign_table, foreign_col] ->
             %{
               constraint_name: constraint_name,
               column_name: String.to_atom(col_name),

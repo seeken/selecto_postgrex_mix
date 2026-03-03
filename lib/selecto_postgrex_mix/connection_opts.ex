@@ -15,10 +15,22 @@ defmodule SelectoPostgrexMix.ConnectionOpts do
 
       parsed_args[:database] ->
         opts = [database: parsed_args[:database]]
-        opts = if parsed_args[:host], do: Keyword.put(opts, :hostname, parsed_args[:host]), else: opts
+
+        opts =
+          if parsed_args[:host], do: Keyword.put(opts, :hostname, parsed_args[:host]), else: opts
+
         opts = if parsed_args[:port], do: Keyword.put(opts, :port, parsed_args[:port]), else: opts
-        opts = if parsed_args[:username], do: Keyword.put(opts, :username, parsed_args[:username]), else: opts
-        opts = if parsed_args[:password], do: Keyword.put(opts, :password, parsed_args[:password]), else: opts
+
+        opts =
+          if parsed_args[:username],
+            do: Keyword.put(opts, :username, parsed_args[:username]),
+            else: opts
+
+        opts =
+          if parsed_args[:password],
+            do: Keyword.put(opts, :password, parsed_args[:password]),
+            else: opts
+
         opts
 
       url = System.get_env("DATABASE_URL") ->

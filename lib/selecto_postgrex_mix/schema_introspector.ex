@@ -114,7 +114,9 @@ defmodule SelectoPostgrexMix.SchemaIntrospector do
         id_field = String.ends_with?(field_str, "_id") or field == :id
         status_field = String.contains?(field_str, ["status", "active", "enabled"])
         timestamp_field = include_timestamps and String.contains?(field_str, ["_at", "date"])
-        suitable_type = field_types[field] in [:string, :integer, :decimal, :boolean, :date, :utc_datetime]
+
+        suitable_type =
+          field_types[field] in [:string, :integer, :decimal, :boolean, :date, :utc_datetime]
 
         (name_field or id_field or status_field or timestamp_field) and suitable_type
       end)
@@ -130,7 +132,10 @@ defmodule SelectoPostgrexMix.SchemaIntrospector do
 
         boolean_filter = field_type == :boolean
         status_filter = String.contains?(field_str, ["status", "type", "category", "role"])
-        date_filter = field_type in [:date, :utc_datetime] and String.contains?(field_str, ["created", "updated"])
+
+        date_filter =
+          field_type in [:date, :utc_datetime] and
+            String.contains?(field_str, ["created", "updated"])
 
         boolean_filter or status_filter or date_filter
       end)

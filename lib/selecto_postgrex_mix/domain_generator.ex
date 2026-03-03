@@ -193,7 +193,13 @@ defmodule SelectoPostgrexMix.DomainGenerator do
     "%{\n#{formatted_columns}\n        }"
   end
 
-  defp generate_columns_config_with_mode(fields, field_types, join_mode, primary_key, assoc_config) do
+  defp generate_columns_config_with_mode(
+         fields,
+         field_types,
+         join_mode,
+         primary_key,
+         assoc_config
+       ) do
     case join_mode do
       {mode_type, display_field} when mode_type in [:tag, :star, :lookup] ->
         display_field_atom = String.to_atom(display_field)
@@ -318,11 +324,20 @@ defmodule SelectoPostgrexMix.DomainGenerator do
         related_table = assoc_config[:related_table] || to_string(assoc_config[:queryable])
         schema_name = resolve_schema_key(related_table, assoc_config)
 
-        should_expand = should_expand_schema?(schema_name, related_table, expand_schemas_list, expand_all)
+        should_expand =
+          should_expand_schema?(schema_name, related_table, expand_schemas_list, expand_all)
+
         join_mode = get_join_mode_for_schema(schema_name, expand_modes)
 
         if should_expand and conn do
-          generate_expanded_schema_config(schema_name, related_table, conn, pg_schema, join_mode, assoc_config)
+          generate_expanded_schema_config(
+            schema_name,
+            related_table,
+            conn,
+            pg_schema,
+            join_mode,
+            assoc_config
+          )
         else
           generate_placeholder_schema_config(schema_name, related_table)
         end
@@ -362,12 +377,25 @@ defmodule SelectoPostgrexMix.DomainGenerator do
       key_lower = String.downcase(key)
 
       cond do
-        key_lower == schema_name_lower -> value
-        key_lower == schema_name_lower <> "s" -> value
-        key_lower <> "s" == schema_name_lower -> value
-        String.ends_with?(key_lower, "ies") && String.replace_suffix(key_lower, "ies", "y") == schema_name_lower -> value
-        String.ends_with?(schema_name_lower, "ies") && String.replace_suffix(schema_name_lower, "ies", "y") == key_lower -> value
-        true -> nil
+        key_lower == schema_name_lower ->
+          value
+
+        key_lower == schema_name_lower <> "s" ->
+          value
+
+        key_lower <> "s" == schema_name_lower ->
+          value
+
+        String.ends_with?(key_lower, "ies") &&
+            String.replace_suffix(key_lower, "ies", "y") == schema_name_lower ->
+          value
+
+        String.ends_with?(schema_name_lower, "ies") &&
+            String.replace_suffix(schema_name_lower, "ies", "y") == key_lower ->
+          value
+
+        true ->
+          nil
       end
     end)
   end
@@ -386,15 +414,30 @@ defmodule SelectoPostgrexMix.DomainGenerator do
       "          }"
   end
 
-  defp generate_expanded_schema_config(schema_name, related_table, conn, pg_schema, join_mode, assoc_config) do
-    case SelectoPostgrexMix.Introspector.Postgres.introspect_table(conn, related_table, schema: pg_schema) do
+  defp generate_expanded_schema_config(
+         schema_name,
+         related_table,
+         conn,
+         pg_schema,
+         join_mode,
+         assoc_config
+       ) do
+    case SelectoPostgrexMix.Introspector.Postgres.introspect_table(conn, related_table,
+           schema: pg_schema
+         ) do
       {:ok, schema_config} ->
         fields = schema_config.fields
         field_types = schema_config.field_types
         primary_key = schema_config.primary_key || :id
 
         columns_config =
-          generate_columns_config_with_mode(fields, field_types, join_mode, primary_key, assoc_config)
+          generate_columns_config_with_mode(
+            fields,
+            field_types,
+            join_mode,
+            primary_key,
+            assoc_config
+          )
 
         mode_comment =
           case join_mode do
@@ -457,7 +500,8 @@ defmodule SelectoPostgrexMix.DomainGenerator do
   defp generate_default_selected(config) do
     suggested_defaults = config[:suggested_defaults][:default_selected] || []
 
-    formatted_defaults = suggested_defaults |> Enum.map(&inspect(to_string(&1))) |> Enum.join(", ")
+    formatted_defaults =
+      suggested_defaults |> Enum.map(&inspect(to_string(&1))) |> Enum.join(", ")
 
     case suggested_defaults do
       [] -> "[]"

@@ -127,7 +127,8 @@ defmodule Mix.Tasks.SelectoPostgrex.Setup do
 
   defp run_all_files(conn_opts, sql_dir) do
     unless File.dir?(sql_dir) do
-      {:error, "SQL directory not found: #{sql_dir}. Run a gen task first (e.g., mix selecto_postgrex.gen.saved_views)"}
+      {:error,
+       "SQL directory not found: #{sql_dir}. Run a gen task first (e.g., mix selecto_postgrex.gen.saved_views)"}
     else
       case SqlRunner.run_sql_directory(sql_dir, conn_opts: conn_opts) do
         {:ok, :no_files} ->
@@ -137,7 +138,9 @@ defmodule Mix.Tasks.SelectoPostgrex.Setup do
           {:ok, "Successfully executed #{count} SQL file(s) from #{sql_dir}/"}
 
         {:error, errors} ->
-          error_msgs = Enum.map(errors, fn {:error, file, err} -> "  #{file}: #{inspect(err)}" end)
+          error_msgs =
+            Enum.map(errors, fn {:error, file, err} -> "  #{file}: #{inspect(err)}" end)
+
           {:error, "Errors executing SQL files:\n#{Enum.join(error_msgs, "\n")}"}
       end
     end

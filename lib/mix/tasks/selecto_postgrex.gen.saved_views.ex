@@ -15,7 +15,9 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.SavedViews do
   ## Options
 
     * `--context-module` - Context module name (default: APP.SavedViewContext)
+    * `--schema-module` - Compatibility option (not used in Postgrex mode)
     * `--table-name` - Database table name (default: saved_views)
+    * `--repo-module` - Compatibility option (not used in Postgrex mode)
     * `--connection-name` - Named Postgrex connection (default: APP.Database)
     * `--dry-run` - Show what would be generated without creating files
 
@@ -35,13 +37,17 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.SavedViews do
       positional: [:app_name],
       schema: [
         context_module: :string,
+        schema_module: :string,
         table_name: :string,
+        repo_module: :string,
         connection_name: :string,
         dry_run: :boolean
       ],
       aliases: [
         c: :context_module,
+        s: :schema_module,
         t: :table_name,
+        r: :repo_module,
         d: :dry_run
       ]
     }
@@ -65,6 +71,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.SavedViews do
 
   defp generate(igniter, app_name, opts) do
     config = build_config(app_name, opts)
+    igniter = maybe_add_compatibility_notices(igniter, opts)
 
     if opts[:dry_run] do
       show_dry_run(config)
@@ -82,10 +89,27 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.SavedViews do
       app_name: app_name,
       app_underscore: Macro.underscore(app_name),
       context_module: opts[:context_module] || "#{app_name}.SavedViewContext",
+      schema_module: opts[:schema_module],
       table_name: opts[:table_name] || "saved_views",
+      repo_module: opts[:repo_module],
       connection_name: opts[:connection_name] || "#{app_name}.Database"
     }
   end
+
+  defp maybe_add_compatibility_notices(igniter, opts) do
+    igniter
+    |> maybe_add_notice(
+      opts[:schema_module],
+      "--schema-module is accepted for compatibility but ignored in Postgrex mode"
+    )
+    |> maybe_add_notice(
+      opts[:repo_module],
+      "--repo-module is accepted for compatibility but ignored in Postgrex mode"
+    )
+  end
+
+  defp maybe_add_notice(igniter, nil, _message), do: igniter
+  defp maybe_add_notice(igniter, _value, message), do: Igniter.add_notice(igniter, message)
 
   defp show_dry_run(config) do
     IO.puts("""
