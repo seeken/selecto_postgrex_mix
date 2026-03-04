@@ -27,13 +27,14 @@ defmodule Mix.Tasks.SelectoPostgrex.Components.Integrate do
     {opts, _} = OptionParser.parse!(args, strict: [check: :boolean, force: :boolean])
 
     check_package_json(opts)
+    selecto_hooks_status = ensure_selecto_hooks_file(opts)
     app_js_status = integrate_app_js(opts)
     app_css_status = integrate_app_css(opts)
 
     if opts[:check] do
-      report_check_status(app_js_status, app_css_status)
+      report_check_status(selecto_hooks_status, app_js_status, app_css_status)
     else
-      report_apply_status(app_js_status, app_css_status)
+      report_apply_status(selecto_hooks_status, app_js_status, app_css_status)
     end
   end
 
@@ -310,14 +311,40 @@ defmodule Mix.Tasks.SelectoPostgrex.Components.Integrate do
     end
   end
 
-  defp report_check_status(js_status, css_status) do
+  defp ensure_selecto_hooks_file(opts) do
+    hooks_path = "assets/js/selecto_hooks.js"
+
+    cond do
+      File.exists?(hooks_path) ->
+        :already_configured
+
+      opts[:check] ->
+        :needs_update
+
+      true ->
+        File.mkdir_p!(Path.dirname(hooks_path))
+
+        content = """
+        const selectoHooks = {}
+
+        export default selectoHooks
+        """
+
+        File.write!(hooks_path, content)
+        :updated
+    end
+  end
+
+  defp report_check_status(hooks_status, js_status, css_status) do
     Mix.shell().info("Integration status check")
+    Mix.shell().info("selecto_hooks.js: #{status_text(hooks_status)}")
     Mix.shell().info("app.js: #{status_text(js_status)}")
     Mix.shell().info("app.css: #{status_text(css_status)}")
   end
 
-  defp report_apply_status(js_status, css_status) do
+  defp report_apply_status(hooks_status, js_status, css_status) do
     Mix.shell().info("Integration results")
+    Mix.shell().info("selecto_hooks.js: #{status_text(hooks_status)}")
     Mix.shell().info("app.js: #{status_text(js_status)}")
     Mix.shell().info("app.css: #{status_text(css_status)}")
     Mix.shell().info("Next: run `cd assets && npm install` and `mix assets.build`")
