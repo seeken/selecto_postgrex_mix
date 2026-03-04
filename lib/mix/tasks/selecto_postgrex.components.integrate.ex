@@ -131,7 +131,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Components.Integrate do
               File.write!(app_js_path, updated)
               :updated
             else
-              :failed
+              :already_configured
             end
         end
 
