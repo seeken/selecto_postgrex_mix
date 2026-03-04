@@ -160,6 +160,7 @@ defmodule SelectoPostgrexMix.Connection do
   1. Explicit `:database_url` option
   2. Explicit connection parameters (`:hostname`, `:database`, etc.)
   3. `DATABASE_URL` environment variable
+  4. Current Mix project's first Ecto repo configuration
   """
   def resolve_connection_opts(opts \\ []) do
     cond do
@@ -178,6 +179,10 @@ defmodule SelectoPostgrexMix.Connection do
       url = System.get_env("DATABASE_URL") ->
         parse_database_url(url)
 
+      # Fall back to current project's Ecto repo config
+      repo_opts = repo_connection_opts_from_current_project() ->
+        repo_opts
+
       true ->
         raise """
         No database connection configured.
@@ -186,7 +191,48 @@ defmodule SelectoPostgrexMix.Connection do
           1. DATABASE_URL environment variable
           2. --database-url flag
           3. --database, --hostname, --username, --password flags
+          4. Configure ecto_repos + Repo config in your current Mix project
         """
+    end
+  end
+
+  defp repo_connection_opts_from_current_project do
+    case Mix.Project.get() do
+      nil ->
+        nil
+
+      project ->
+        app = project.project()[:app]
+
+        with true <- not is_nil(app),
+             repos when is_list(repos) <- Application.get_env(app, :ecto_repos, []),
+             [repo | _] <- repos,
+             repo_config when is_list(repo_config) <- Application.get_env(app, repo, []),
+             opts when is_list(opts) <- normalize_repo_config_to_connection_opts(repo_config),
+             true <- opts != [] do
+          opts
+        else
+          _ -> nil
+        end
+    end
+  end
+
+  defp normalize_repo_config_to_connection_opts(repo_config) do
+    cond do
+      url = Keyword.get(repo_config, :url) ->
+        parse_database_url(url)
+
+      url = Keyword.get(repo_config, :database_url) ->
+        parse_database_url(url)
+
+      true ->
+        repo_config
+        |> Keyword.take([:hostname, :port, :database, :username, :password])
+        |> Keyword.put_new(:hostname, "localhost")
+        |> Keyword.put_new(:port, 5432)
+        |> then(fn opts ->
+          if Keyword.get(opts, :database), do: opts, else: []
+        end)
     end
   end
 end
