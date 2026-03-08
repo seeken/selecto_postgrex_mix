@@ -36,7 +36,11 @@ defmodule SelectoPostgrexMix.MixProject do
     [
       maintainers: ["Selecto Team"],
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/selectodb/selecto_postgrex_mix"}
+      links: %{
+        "GitHub" => "https://github.com/selectodb/selecto_postgrex_mix",
+        "SQL Patterns" => "https://seeken.github.io/selecto-sql-patterns",
+        "Demo (Fly)" => "https://testselecto.fly.dev"
+      }
     ]
   end
 end
