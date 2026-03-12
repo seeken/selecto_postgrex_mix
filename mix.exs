@@ -5,7 +5,7 @@ defmodule SelectoPostgrexMix.MixProject do
     [
       app: :selecto_postgrex_mix,
       version: "0.1.2",
-      elixir: "~> 1.14",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
