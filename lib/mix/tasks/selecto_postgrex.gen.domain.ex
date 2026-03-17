@@ -117,48 +117,62 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
         "selecto_postgrex.gen.domain is on the consolidation path; equivalent shared command: #{equivalent_selecto_mix_command(parsed_args)}"
       )
 
-    # Parse expand modes
-    expand_modes = parse_expand_modes(parsed_args)
-    expand_schemas = parse_expand_schemas(parsed_args[:expand_schemas] || "")
-    schemas_from_modes = Map.keys(expand_modes)
-    expand_schemas = Enum.uniq(expand_schemas ++ schemas_from_modes)
+    case delegate_to_selecto_mix(parsed_args) do
+      :ok ->
+        igniter
 
-    # Validate flags
-    igniter = validate_flags(igniter, parsed_args)
+      {:error, output} ->
+        IO.puts(output)
 
-    conn_opts = ConnectionOpts.from_parsed_args(parsed_args)
-    pg_schema = parsed_args[:schema] || "public"
-    exclude_patterns = parse_exclude_patterns(parsed_args[:exclude] || "")
+        igniter =
+          Igniter.add_warning(
+            igniter,
+            "Shared selecto.gen.domain delegation failed; falling back to legacy selecto_postgrex generation"
+          )
 
-    tables =
-      cond do
-        parsed_args[:all] ->
-          discover_all_tables(conn_opts, pg_schema)
+        # Parse expand modes
+        expand_modes = parse_expand_modes(parsed_args)
+        expand_schemas = parse_expand_schemas(parsed_args[:expand_schemas] || "")
+        schemas_from_modes = Map.keys(expand_modes)
+        expand_schemas = Enum.uniq(expand_schemas ++ schemas_from_modes)
 
-        table = parsed_args[:table] ->
-          [table]
+        # Validate flags
+        igniter = validate_flags(igniter, parsed_args)
 
-        true ->
-          []
-      end
+        conn_opts = ConnectionOpts.from_parsed_args(parsed_args)
+        pg_schema = parsed_args[:schema] || "public"
+        exclude_patterns = parse_exclude_patterns(parsed_args[:exclude] || "")
 
-    tables = Enum.reject(tables, &table_matches_exclude?(&1, exclude_patterns))
+        tables =
+          cond do
+            parsed_args[:all] ->
+              discover_all_tables(conn_opts, pg_schema)
 
-    if Enum.empty?(tables) do
-      Igniter.add_warning(igniter, """
-      No tables specified. Use one of:
-        mix selecto_postgrex.gen.domain --table TABLE_NAME
-        mix selecto_postgrex.gen.domain --all
-      """)
-    else
-      updated_args =
-        parsed_args
-        |> Map.put(:expand_schemas_list, expand_schemas)
-        |> Map.put(:expand_modes, expand_modes)
-        |> Map.put(:conn_opts, conn_opts)
-        |> Map.put(:pg_schema, pg_schema)
+            table = parsed_args[:table] ->
+              [table]
 
-      process_tables(igniter, tables, updated_args)
+            true ->
+              []
+          end
+
+        tables = Enum.reject(tables, &table_matches_exclude?(&1, exclude_patterns))
+
+        if Enum.empty?(tables) do
+          Igniter.add_warning(igniter, """
+          No tables specified. Use one of:
+            mix selecto_postgrex.gen.domain --table TABLE_NAME
+            mix selecto_postgrex.gen.domain --all
+          """)
+        else
+          updated_args =
+            parsed_args
+            |> Map.put(:expand_schemas_list, expand_schemas)
+            |> Map.put(:expand_modes, expand_modes)
+            |> Map.put(:conn_opts, conn_opts)
+            |> Map.put(:pg_schema, pg_schema)
+
+          process_tables(igniter, tables, updated_args)
+        end
     end
   end
 
@@ -680,38 +694,71 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
   end
 
   defp equivalent_selecto_mix_command(parsed_args) do
-    parts = ["mix selecto.gen.domain", "--adapter postgresql"]
+    (["mix selecto.gen.domain", "--adapter postgresql"] ++ equivalent_args(parsed_args))
+    |> Enum.join(" ")
+  end
 
-    parts =
-      cond do
-        parsed_args[:all] -> parts ++ ["--all"]
-        parsed_args[:table] -> parts ++ ["--table #{parsed_args[:table]}"]
-        true -> parts
-      end
+  defp equivalent_args(parsed_args) do
+    []
+    |> maybe_add_bool_flag(parsed_args, :all, "--all")
+    |> maybe_add_value_flag(parsed_args, :table, "--table")
+    |> maybe_add_value_flag(parsed_args, :database_url, "--database-url")
+    |> maybe_add_value_flag(parsed_args, :host, "--host")
+    |> maybe_add_value_flag(parsed_args, :port, "--port")
+    |> maybe_add_value_flag(parsed_args, :database, "--database")
+    |> maybe_add_value_flag(parsed_args, :username, "--username")
+    |> maybe_add_value_flag(parsed_args, :password, "--password")
+    |> maybe_add_value_flag(parsed_args, :schema, "--schema")
+    |> maybe_add_bool_flag(parsed_args, :include_associations, "--include-associations")
+    |> maybe_add_bool_flag(parsed_args, :expand, "--expand")
+    |> maybe_add_value_flag(parsed_args, :expand_schemas, "--expand-schemas")
+    |> maybe_add_keep_flag(parsed_args, :expand_tag, "--expand-tag")
+    |> maybe_add_keep_flag(parsed_args, :expand_star, "--expand-star")
+    |> maybe_add_keep_flag(parsed_args, :expand_lookup, "--expand-lookup")
+    |> maybe_add_keep_flag(parsed_args, :expand_polymorphic, "--expand-polymorphic")
+    |> maybe_add_bool_flag(parsed_args, :parameterized_joins, "--parameterized-joins")
+    |> maybe_add_bool_flag(parsed_args, :live, "--live")
+    |> maybe_add_bool_flag(parsed_args, :saved_views, "--saved-views")
+    |> maybe_add_value_flag(parsed_args, :path, "--path")
+    |> maybe_add_value_flag(parsed_args, :output, "--output")
+    |> maybe_add_bool_flag(parsed_args, :force, "--force")
+    |> maybe_add_bool_flag(parsed_args, :dry_run, "--dry-run")
+    |> maybe_add_bool_flag(parsed_args, :enable_modal, "--enable-modal")
+    |> maybe_add_value_flag(parsed_args, :connection_name, "--connection-name")
+    |> maybe_add_value_flag(parsed_args, :exclude, "--exclude")
+  end
 
-    parts = if parsed_args[:database_url], do: parts ++ ["--database-url <url>"], else: parts
-    parts = if parsed_args[:host], do: parts ++ ["--host #{parsed_args[:host]}"], else: parts
-    parts = if parsed_args[:port], do: parts ++ ["--port #{parsed_args[:port]}"], else: parts
+  defp delegate_to_selecto_mix(parsed_args) do
+    case System.cmd(
+           "mix",
+           ["selecto.gen.domain", "--adapter", "postgresql"] ++ equivalent_args(parsed_args),
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        IO.puts(output)
+        :ok
 
-    parts =
-      if parsed_args[:database],
-        do: parts ++ ["--database #{parsed_args[:database]}"],
-        else: parts
+      {output, _exit_code} ->
+        {:error, output}
+    end
+  end
 
-    parts =
-      if parsed_args[:username],
-        do: parts ++ ["--username #{parsed_args[:username]}"],
-        else: parts
+  defp maybe_add_bool_flag(args, parsed_args, key, flag) do
+    if parsed_args[key], do: args ++ [flag], else: args
+  end
 
-    parts =
-      if parsed_args[:schema], do: parts ++ ["--schema #{parsed_args[:schema]}"], else: parts
+  defp maybe_add_value_flag(args, parsed_args, key, flag) do
+    case parsed_args[key] do
+      nil -> args
+      value -> args ++ [flag, to_string(value)]
+    end
+  end
 
-    parts = if parsed_args[:expand], do: parts ++ ["--expand"], else: parts
-    parts = if parsed_args[:live], do: parts ++ ["--live"], else: parts
-
-    parts =
-      if parsed_args[:saved_views], do: parts ++ ["--saved-views"], else: parts
-
-    Enum.join(parts, " ")
+  defp maybe_add_keep_flag(args, parsed_args, key, flag) do
+    case parsed_args[key] do
+      values when is_list(values) -> Enum.reduce(values, args, &(&2 ++ [flag, &1]))
+      nil -> args
+      value -> args ++ [flag, to_string(value)]
+    end
   end
 end
