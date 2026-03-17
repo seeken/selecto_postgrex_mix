@@ -93,7 +93,7 @@ defmodule SelectoPostgrexMix.Connection do
       result = SelectoPostgrexMix.Connection.with_connection(
         [database: "mydb"],
         fn conn ->
-          SelectoPostgrexMix.Introspector.Postgres.introspect_table(conn, "users")
+          SelectoDBPostgreSQL.Adapter.introspect_table(conn, "users", schema: "public")
         end
       )
   """
