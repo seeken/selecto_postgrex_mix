@@ -111,6 +111,12 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     options = igniter.args.options
     parsed_args = Map.new(options) |> Map.put_new(:include_associations, true)
 
+    igniter =
+      Igniter.add_notice(
+        igniter,
+        "selecto_postgrex.gen.domain is on the consolidation path; equivalent shared command: #{equivalent_selecto_mix_command(parsed_args)}"
+      )
+
     # Parse expand modes
     expand_modes = parse_expand_modes(parsed_args)
     expand_schemas = parse_expand_schemas(parsed_args[:expand_schemas] || "")
@@ -671,5 +677,41 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   defp get_app_name(igniter) do
     Igniter.Project.Application.app_name(igniter)
+  end
+
+  defp equivalent_selecto_mix_command(parsed_args) do
+    parts = ["mix selecto.gen.domain", "--adapter postgresql"]
+
+    parts =
+      cond do
+        parsed_args[:all] -> parts ++ ["--all"]
+        parsed_args[:table] -> parts ++ ["--table #{parsed_args[:table]}"]
+        true -> parts
+      end
+
+    parts = if parsed_args[:database_url], do: parts ++ ["--database-url <url>"], else: parts
+    parts = if parsed_args[:host], do: parts ++ ["--host #{parsed_args[:host]}"], else: parts
+    parts = if parsed_args[:port], do: parts ++ ["--port #{parsed_args[:port]}"], else: parts
+
+    parts =
+      if parsed_args[:database],
+        do: parts ++ ["--database #{parsed_args[:database]}"],
+        else: parts
+
+    parts =
+      if parsed_args[:username],
+        do: parts ++ ["--username #{parsed_args[:username]}"],
+        else: parts
+
+    parts =
+      if parsed_args[:schema], do: parts ++ ["--schema #{parsed_args[:schema]}"], else: parts
+
+    parts = if parsed_args[:expand], do: parts ++ ["--expand"], else: parts
+    parts = if parsed_args[:live], do: parts ++ ["--live"], else: parts
+
+    parts =
+      if parsed_args[:saved_views], do: parts ++ ["--saved-views"], else: parts
+
+    Enum.join(parts, " ")
   end
 end
