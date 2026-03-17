@@ -5,8 +5,8 @@ defmodule SelectoPostgrexMix do
   SelectoPostgrexMix provides PostgreSQL-oriented compatibility tasks during the
   consolidation into `selecto_mix`.
 
-  Domain generation now routes through the shared `selecto_mix` flow where possible,
-  while PostgreSQL-specific compatibility wrappers remain available for:
+  Domain generation now routes through the shared `selecto_mix` flow, while
+  PostgreSQL-specific compatibility wrappers remain available for:
 
   - Projects that don't use Ecto
   - Generating domains from existing databases
@@ -15,7 +15,7 @@ defmodule SelectoPostgrexMix do
 
   ## Main Mix Tasks
 
-  - `mix selecto_postgrex.gen.domain` - Generate Selecto domain from database tables
+  - `mix selecto_postgrex.gen.domain` - Compatibility wrapper to `mix selecto.gen.domain --adapter postgresql`
   - `mix selecto_postgrex.gen.saved_views` - Generate saved views infrastructure
   - `mix selecto_postgrex.gen.filter_sets` - Generate filter sets infrastructure
   - `mix selecto_postgrex.gen.saved_view_configs` - Generate view configs infrastructure
