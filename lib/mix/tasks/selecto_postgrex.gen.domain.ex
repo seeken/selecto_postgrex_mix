@@ -317,7 +317,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
         if opts[:parameterized_joins] do
           Igniter.add_notice(
             igniter,
-            "Parameterized joins enabled: use mix selecto_postgrex.gen.parameterized_join to scaffold join templates"
+            "Parameterized joins enabled: use mix selecto.gen.parameterized_join to scaffold join templates"
           )
         else
           igniter
