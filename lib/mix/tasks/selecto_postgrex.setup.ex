@@ -37,7 +37,8 @@ defmodule Mix.Tasks.SelectoPostgrex.Setup do
 
   use Igniter.Mix.Task
 
-  alias SelectoPostgrexMix.{Connection, ConnectionOpts, SqlRunner}
+  alias SelectoPostgrexMix.{Connection, SqlRunner}
+  alias SelectoMix.ConnectionOpts
 
   @impl Igniter.Mix.Task
   def info(_argv, _composing_task) do

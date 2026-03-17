@@ -61,9 +61,10 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   use Igniter.Mix.Task
 
-  alias SelectoPostgrexMix.{Connection, ConnectionOpts}
+  alias SelectoPostgrexMix.Connection
 
   alias SelectoMix.{
+    ConnectionOpts,
     ConfigMerger,
     DomainGenerator,
     LiveViewGenerator,
