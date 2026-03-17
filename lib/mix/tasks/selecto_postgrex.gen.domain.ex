@@ -61,8 +61,15 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   use Igniter.Mix.Task
 
-  alias SelectoPostgrexMix.{Connection, ConnectionOpts, DomainGenerator, SchemaIntrospector}
-  alias SelectoMix.{ConfigMerger, LiveViewGenerator, OverlayGenerator}
+  alias SelectoPostgrexMix.{Connection, ConnectionOpts}
+
+  alias SelectoMix.{
+    ConfigMerger,
+    DomainGenerator,
+    LiveViewGenerator,
+    OverlayGenerator,
+    SchemaIntrospector
+  }
 
   @impl Igniter.Mix.Task
   def info(_argv, _composing_task) do
@@ -435,35 +442,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
     content =
       Connection.with_connection(conn_opts, fn conn ->
-        introspect_opts = [
-          schema: pg_schema,
-          include_associations: Map.get(opts, :include_associations, true),
-          expand: opts[:expand] || false
-        ]
-
-        config = SchemaIntrospector.introspect_schema(conn, table, introspect_opts)
-
-        config =
-          if opts[:expand_schemas_list] do
-            Map.put(config, :expand_schemas_list, opts[:expand_schemas_list])
-          else
-            config
-          end
-
-        config = Map.put(config, :expand, opts[:expand] || false)
-
-        config =
-          if opts[:expand_modes] && map_size(opts[:expand_modes]) > 0 do
-            Map.put(config, :expand_modes, opts[:expand_modes])
-          else
-            config
-          end
-
-        # Keep connection alive for schema expansion while generating file content.
-        config =
-          config
-          |> Map.put(:conn, conn)
-          |> Map.put(:pg_schema, pg_schema)
+        config = introspect_shared_domain_config(conn, table, pg_schema, opts)
 
         merged_config =
           if opts[:force] do
@@ -472,7 +451,8 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
             ConfigMerger.merge_with_existing(config, existing_content)
           end
 
-        DomainGenerator.generate_domain_file(table, merged_config, gen_opts)
+        source = {:db, SelectoDBPostgreSQL.Adapter, conn, table, schema: pg_schema}
+        DomainGenerator.generate_domain_file(source, merged_config, gen_opts)
       end)
 
     if File.exists?(file_path) do
@@ -490,18 +470,12 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     else
       config =
         Connection.with_connection(conn_opts, fn conn ->
-          SchemaIntrospector.introspect_schema(conn, table,
-            schema: pg_schema,
-            include_associations: Map.get(opts, :include_associations, true)
-          )
+          introspect_shared_domain_config(conn, table, pg_schema, opts)
         end)
 
       app_name = get_app_name(igniter) |> to_string() |> Macro.camelize()
-
-      module_name =
-        Macro.camelize(SelectoPostgrexMix.Introspector.Postgres.table_name_to_module(table))
-
-      domain_module_name = "#{app_name}.SelectoDomains.#{module_name}Domain"
+      source = {:db, SelectoDBPostgreSQL.Adapter, :fallback_conn, table, schema: pg_schema}
+      domain_module_name = DomainGenerator.domain_module_name(source, config, app_name: app_name)
 
       content = OverlayGenerator.generate_overlay_file(domain_module_name, config, opts)
 
@@ -611,6 +585,143 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
       "vendor"
     else
       "deps"
+    end
+  end
+
+  defp introspect_shared_domain_config(conn, table, pg_schema, opts) do
+    source = {:db, SelectoDBPostgreSQL.Adapter, conn, table, schema: pg_schema}
+
+    introspect_opts = [
+      schema: pg_schema,
+      include_associations: Map.get(opts, :include_associations, true),
+      expand: opts[:expand] || false
+    ]
+
+    config = SchemaIntrospector.introspect_schema(source, introspect_opts)
+
+    config =
+      if opts[:expand_schemas_list] do
+        expand_shared_db_associations(
+          config,
+          conn,
+          pg_schema,
+          opts[:expand_schemas_list],
+          introspect_opts
+        )
+      else
+        config
+      end
+
+    config
+    |> Map.put(:expand_schemas_list, opts[:expand_schemas_list] || [])
+    |> Map.put(:expand, opts[:expand] || false)
+    |> maybe_put_expand_modes(opts)
+  end
+
+  defp maybe_put_expand_modes(config, opts) do
+    if opts[:expand_modes] && map_size(opts[:expand_modes]) > 0 do
+      Map.put(config, :expand_modes, opts[:expand_modes])
+    else
+      config
+    end
+  end
+
+  defp expand_shared_db_associations(domain_config, conn, pg_schema, expand_list, introspect_opts) do
+    associations = domain_config[:associations] || %{}
+
+    expanded_schemas =
+      Enum.reduce(associations, %{}, fn {assoc_name, assoc_data}, acc ->
+        related_table = assoc_data[:related_table]
+        schema_key = related_schema_key(assoc_name, assoc_data)
+
+        if should_expand_related_table?(schema_key, related_table, expand_list) and related_table do
+          related_source =
+            {:db, SelectoDBPostgreSQL.Adapter, conn, related_table,
+             schema: pg_schema, include_associations: false, expand: false}
+
+          related_opts =
+            introspect_opts
+            |> Keyword.put(:include_associations, false)
+            |> Keyword.put(:expand, false)
+
+          related_config = SchemaIntrospector.introspect_schema(related_source, related_opts)
+
+          if Map.has_key?(related_config, :error) do
+            acc
+          else
+            Map.put(acc, schema_key, %{
+              source_table: related_config.table_name,
+              table_name: related_config.table_name,
+              primary_key: related_config.primary_key,
+              fields: related_config.fields,
+              field_types: related_config.field_types,
+              associations: %{}
+            })
+          end
+        else
+          acc
+        end
+      end)
+
+    Map.put(domain_config, :expanded_schemas, expanded_schemas)
+  end
+
+  defp related_schema_key(assoc_name, assoc_data) do
+    cond do
+      module_name = assoc_data[:related_module_name] ->
+        module_name
+        |> to_string()
+        |> Macro.underscore()
+        |> String.to_atom()
+
+      related_schema = assoc_data[:related_schema] ->
+        related_schema
+        |> to_string()
+        |> String.split(".")
+        |> List.last()
+        |> Macro.underscore()
+        |> String.to_atom()
+
+      related_table = assoc_data[:related_table] ->
+        related_table
+        |> singularize_table_name()
+        |> String.to_atom()
+
+      true ->
+        assoc_name
+    end
+  end
+
+  defp should_expand_related_table?(schema_key, related_table, expand_list) do
+    schema_name = schema_key |> to_string() |> String.downcase()
+    table_name = related_table |> to_string() |> String.downcase()
+
+    Enum.any?(expand_list || [], fn expand_name ->
+      expand_name = String.downcase(expand_name)
+
+      expand_name == schema_name ||
+        expand_name == table_name ||
+        String.contains?(expand_name, schema_name) ||
+        String.contains?(table_name, expand_name)
+    end)
+  end
+
+  defp singularize_table_name(table_name) do
+    cond do
+      String.ends_with?(table_name, "ies") ->
+        String.replace_suffix(table_name, "ies", "y")
+
+      String.ends_with?(table_name, "sses") ->
+        String.replace_suffix(table_name, "sses", "ss")
+
+      String.ends_with?(table_name, "ses") ->
+        String.replace_suffix(table_name, "ses", "s")
+
+      String.ends_with?(table_name, "s") and not String.ends_with?(table_name, "ss") ->
+        String.replace_suffix(table_name, "s", "")
+
+      true ->
+        table_name
     end
   end
 
