@@ -197,7 +197,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   defp discover_all_tables(conn_opts, pg_schema) do
     case Connection.with_connection(conn_opts, fn conn ->
-           SelectoPostgrexMix.Introspector.Postgres.list_tables(conn, pg_schema)
+           postgresql_adapter().list_tables(conn, schema: pg_schema)
          end) do
       {:ok, tables} ->
         Enum.reject(tables, &(&1 in ConnectionOpts.system_tables()))
@@ -586,6 +586,10 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     else
       "deps"
     end
+  end
+
+  defp postgresql_adapter do
+    Module.concat(["SelectoDBPostgreSQL", "Adapter"])
   end
 
   defp introspect_shared_domain_config(conn, table, pg_schema, opts) do

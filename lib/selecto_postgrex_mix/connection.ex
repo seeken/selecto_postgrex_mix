@@ -22,7 +22,7 @@ defmodule SelectoPostgrexMix.Connection do
 
       # With auto-cleanup
       SelectoPostgrexMix.Connection.with_connection(fn conn ->
-        {:ok, tables} = SelectoPostgrexMix.Introspector.Postgres.list_tables(conn)
+        {:ok, tables} = SelectoPostgrexMix.list_tables(conn)
         tables
       end)
   """
@@ -128,7 +128,7 @@ defmodule SelectoPostgrexMix.Connection do
   ## Examples
 
       result = SelectoPostgrexMix.Connection.with_connection(fn conn ->
-        {:ok, tables} = SelectoPostgrexMix.Introspector.Postgres.list_tables(conn)
+        {:ok, tables} = SelectoPostgrexMix.list_tables(conn)
         tables
       end)
 

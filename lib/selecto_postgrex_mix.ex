@@ -77,6 +77,10 @@ defmodule SelectoPostgrexMix do
   List tables in a database using a Postgrex connection.
   """
   def list_tables(conn, schema \\ "public") do
-    SelectoPostgrexMix.Introspector.Postgres.list_tables(conn, schema)
+    postgresql_adapter().list_tables(conn, schema: schema)
+  end
+
+  defp postgresql_adapter do
+    Module.concat(["SelectoDBPostgreSQL", "Adapter"])
   end
 end
