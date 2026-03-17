@@ -1,6 +1,6 @@
 defmodule SelectoPostgrexMix do
   @moduledoc """
-  Mix tasks for Selecto domain generation via direct Postgrex introspection.
+  Compatibility wrappers for PostgreSQL-oriented Selecto generation.
 
   SelectoPostgrexMix provides PostgreSQL-oriented compatibility tasks during the
   consolidation into `selecto_mix`.
@@ -10,16 +10,16 @@ defmodule SelectoPostgrexMix do
 
   - Projects that don't use Ecto
   - Generating domains from existing databases
-  - Working with databases where Ecto schemas haven't been defined yet
-  - Polyglot environments where the database is shared across languages
+  - Working with projects that still call the old `selecto_postgrex.*` commands
+  - Transitional compatibility while moving docs/scripts to `selecto_mix`
 
   ## Main Mix Tasks
 
   - `mix selecto_postgrex.gen.domain` - Compatibility wrapper to `mix selecto.gen.domain --adapter postgresql`
-  - `mix selecto_postgrex.gen.saved_views` - Generate saved views infrastructure
-  - `mix selecto_postgrex.gen.filter_sets` - Generate filter sets infrastructure
-  - `mix selecto_postgrex.gen.saved_view_configs` - Generate view configs infrastructure
-  - `mix selecto_postgrex.install` - Install Selecto Postgrex dependencies
+  - `mix selecto_postgrex.gen.saved_views` - Compatibility wrapper to `mix selecto.gen.saved_views --adapter postgresql`
+  - `mix selecto_postgrex.gen.filter_sets` - Compatibility wrapper to `mix selecto.gen.filter_sets --adapter postgresql`
+  - `mix selecto_postgrex.gen.saved_view_configs` - Compatibility wrapper to `mix selecto.gen.saved_view_configs --adapter postgresql`
+  - `mix selecto_postgrex.install` - Compatibility wrapper to `mix selecto.install`
   - `mix selecto_postgrex.components.integrate` - Compatibility wrapper to shared assets integration
   - `mix selecto_postgrex.gen.live_dashboard` - Compatibility wrapper to shared dashboard generation
   - `mix selecto_postgrex.gen.parameterized_join` - Compatibility wrapper to shared parameterized join generation
@@ -56,7 +56,7 @@ defmodule SelectoPostgrexMix do
   Check if required runtime dependencies are available.
   """
   def dependencies_available? do
-    Code.ensure_loaded?(Postgrex) and Code.ensure_loaded?(Selecto)
+    Code.ensure_loaded?(SelectoDBPostgreSQL.Adapter) and Code.ensure_loaded?(Selecto)
   end
 
   @doc """
@@ -71,16 +71,5 @@ defmodule SelectoPostgrexMix do
       dir ->
         dir
     end
-  end
-
-  @doc """
-  List tables in a database using a Postgrex connection.
-  """
-  def list_tables(conn, schema \\ "public") do
-    postgresql_adapter().list_tables(conn, schema: schema)
-  end
-
-  defp postgresql_adapter do
-    Module.concat(["SelectoDBPostgreSQL", "Adapter"])
   end
 end

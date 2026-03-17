@@ -22,11 +22,19 @@ defmodule SelectoPostgrexMix.MixProject do
   defp deps do
     [
       selecto_mix_dep(),
-      {:postgrex, "~> 0.17"},
+      selecto_db_postgresql_dep(),
       {:igniter, "~> 0.6"},
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}
     ]
+  end
+
+  defp selecto_db_postgresql_dep do
+    if use_local_ecosystem?() do
+      {:selecto_db_postgresql, path: "../selecto_db_postgresql"}
+    else
+      {:selecto_db_postgresql, ">= 0.4.0"}
+    end
   end
 
   defp selecto_mix_dep do
@@ -45,7 +53,7 @@ defmodule SelectoPostgrexMix.MixProject do
   end
 
   defp description do
-    "Mix tasks for Selecto domain generation via direct Postgrex introspection (no Ecto required)"
+    "Compatibility wrappers for PostgreSQL-oriented Selecto generation during consolidation into selecto_mix"
   end
 
   defp package do
