@@ -1,6 +1,6 @@
 defmodule SelectoPostgrexMix.DomainGenerator do
   @moduledoc """
-  Generates Selecto domain configuration files from Postgrex introspection data.
+  Legacy fallback domain rendering for `mix selecto_postgrex.gen.domain`.
 
   Unlike SelectoMix.DomainGenerator which generates code referencing Ecto schemas
   and Repo, this module generates code that uses named Postgrex connections directly.
@@ -11,7 +11,7 @@ defmodule SelectoPostgrexMix.DomainGenerator do
   """
   def generate_domain_file(table_name, config, opts \\ []) do
     module_name = get_domain_module_name(table_name, config, opts)
-    overlay_module_name = SelectoPostgrexMix.OverlayGenerator.overlay_module_name(module_name)
+    overlay_module_name = SelectoMix.OverlayGenerator.overlay_module_name(module_name)
     saved_views_use = generate_saved_views_use(opts)
     connection_name = opts[:connection_name] || infer_connection_name(opts)
 

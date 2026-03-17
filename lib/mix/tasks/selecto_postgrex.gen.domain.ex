@@ -61,8 +61,8 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   use Igniter.Mix.Task
 
-  alias SelectoPostgrexMix.{Connection, ConnectionOpts, SchemaIntrospector}
-  alias SelectoPostgrexMix.{DomainGenerator, ConfigMerger, OverlayGenerator}
+  alias SelectoPostgrexMix.{Connection, ConnectionOpts, DomainGenerator, SchemaIntrospector}
+  alias SelectoMix.{ConfigMerger, LiveViewGenerator, OverlayGenerator}
 
   @impl Igniter.Mix.Task
   def info(_argv, _composing_task) do
@@ -394,7 +394,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
   defp remove_legacy_duplicate_files(igniter, table, output_dir, current_domain_file) do
     legacy_basename =
       table
-      |> SelectoPostgrexMix.Introspector.Postgres.table_name_to_module()
+      |> LiveViewGenerator.source_live_name()
       |> Macro.underscore()
 
     legacy_domain_file = Path.join([output_dir, "#{legacy_basename}_domain.ex"])
@@ -514,124 +514,33 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
   end
 
   defp generate_live_view_for_table(igniter, table, opts) do
-    app_name = get_app_name(igniter)
-    app_name_str = to_string(app_name)
+    app_name = get_app_name(igniter) |> to_string() |> Macro.camelize()
+    pg_schema = opts[:pg_schema] || "public"
+    source = {:db, SelectoDBPostgreSQL.Adapter, :fallback_conn, table, schema: pg_schema}
 
-    schema_name = SelectoPostgrexMix.Introspector.Postgres.table_name_to_module(table)
-    schema_underscore = Macro.underscore(schema_name)
-    live_file = "lib/#{app_name_str}_web/live/#{schema_underscore}_live.ex"
-
-    connection_name = opts[:connection_name] || "#{Macro.camelize(app_name_str)}.Database"
-    route_path = opts[:path] || "/#{schema_underscore}"
-    route_path = if String.starts_with?(route_path, "/"), do: route_path, else: "/#{route_path}"
-
-    domain_module = "#{Macro.camelize(app_name_str)}.SelectoDomains.#{schema_name}Domain"
-    web_module = "#{Macro.camelize(app_name_str)}Web"
-
-    saved_views_code =
-      if opts[:saved_views] do
-        """
-            saved_views = #{domain_module}.get_view_names(path)
-
-            socket =
-              assign(socket,
-                show_view_configurator: false,
-                views: views,
-                my_path: path,
-                saved_view_module: #{domain_module},
-                saved_view_context: path,
-                path: path,
-                available_saved_views: saved_views
-              )
-        """
-      else
-        """
-            socket =
-              assign(socket,
-                show_view_configurator: false,
-                views: views,
-                my_path: path
-              )
-        """
-      end
-
-    content = """
-    defmodule #{web_module}.#{schema_name}Live do
-      @moduledoc \"\"\"
-      LiveView for #{schema_name} using SelectoComponents.
-
-      Uses direct Postgrex connection (no Ecto).
-      \"\"\"
-
-      use #{web_module}, :live_view
-      use SelectoComponents.Form
-
-      @impl true
-      def mount(_params, _session, socket) do
-        domain = #{domain_module}.domain()
-        path = "#{route_path}"
-
-        # Use named Postgrex connection
-        selecto = Selecto.configure(domain, #{connection_name})
-
-        views = [
-          {:aggregate, SelectoComponents.Views.Aggregate, "Aggregate View", %{drill_down: :detail}},
-          {:detail, SelectoComponents.Views.Detail, "Detail View", %{}},
-          {:graph, SelectoComponents.Views.Graph, "Graph View", %{}}
-        ]
-
-        state = get_initial_state(views, selecto)
-
-    #{saved_views_code}
-
-        {:ok, assign(socket, state), layout: {#{web_module}.Layouts, :root}}
-      end
-
-      @impl true
-      def render(assigns) do
-        ~H\"\"\"
-        <div class="container mx-auto px-4 py-8">
-          <h1 class="text-3xl font-bold mb-6">#{schema_name} Explorer</h1>
-
-          <.live_component
-            module={SelectoComponents.Form}
-            id="#{schema_underscore}-form"
-            #{if opts[:enable_modal], do: "enable_modal_detail={true}", else: ""}
-            {assigns}
-          />
-
-          <.live_component
-            module={SelectoComponents.Results}
-            id="#{schema_underscore}-results"
-            {assigns}
-          />
-        </div>
-        \"\"\"
-      end
-
-      @impl true
-      def handle_event("toggle_show_view_configurator", _params, socket) do
-        {:noreply, assign(socket, show_view_configurator: !socket.assigns.show_view_configurator)}
-      end
-    end
-    """
-
+    live_file = LiveViewGenerator.live_view_file_path(app_name, source)
+    html_file = LiveViewGenerator.live_view_html_file_path(app_name, source)
     live_dir = Path.dirname(live_file)
+    schema_name = LiveViewGenerator.source_live_name(source)
+    domain_module = "#{app_name}.SelectoDomains.#{schema_name}Domain"
+    template_opts = Map.to_list(opts)
+
+    live_content =
+      LiveViewGenerator.render_live_view_template(
+        app_name,
+        source,
+        domain_module,
+        template_opts,
+        get_selecto_components_location()
+      )
+
+    html_content = LiveViewGenerator.render_live_view_html_template(source, template_opts)
 
     igniter
     |> ensure_directory_exists(live_dir)
-    |> Igniter.create_new_file(live_file, content)
-    |> add_route_suggestion(table, schema_name, route_path)
-  end
-
-  defp add_route_suggestion(igniter, _table, schema_name, route_path) do
-    route_path = String.replace_prefix(route_path, "/", "")
-
-    Igniter.add_notice(igniter, """
-
-    Add this route to your router.ex:
-      live "/#{route_path}", #{schema_name}Live, :index
-    """)
+    |> Igniter.create_new_file(live_file, live_content)
+    |> Igniter.create_new_file(html_file, html_content)
+    |> Igniter.add_notice(LiveViewGenerator.route_suggestion(source, template_opts))
   end
 
   defp add_connection_setup_notice(igniter, opts) do
@@ -693,6 +602,16 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
 
   defp get_app_name(igniter) do
     Igniter.Project.Application.app_name(igniter)
+  end
+
+  defp get_selecto_components_location() do
+    vendor_path = Path.join([File.cwd!(), "vendor", "selecto_components"])
+
+    if File.dir?(vendor_path) do
+      "vendor"
+    else
+      "deps"
+    end
   end
 
   defp equivalent_selecto_mix_command(parsed_args) do

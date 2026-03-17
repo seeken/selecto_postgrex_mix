@@ -1,6 +1,7 @@
 defmodule SelectoPostgrexMix.SchemaIntrospector do
   @moduledoc """
-  Introspects PostgreSQL tables via Postgrex and returns Selecto domain configuration data.
+  Legacy fallback support for PostgreSQL table introspection used by
+  `mix selecto_postgrex.gen.domain` when shared `selecto_mix` delegation fails.
 
   Unlike SelectoMix.SchemaIntrospector which works with Ecto schemas via `__schema__/1`,
   this module queries the database directly using Postgrex connections.
