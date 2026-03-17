@@ -1,6 +1,6 @@
 defmodule SelectoPostgrexMix.SqlRunner do
   @moduledoc """
-  Utility to execute SQL files via Postgrex.
+  Utility to execute SQL files via the PostgreSQL adapter.
   """
 
   alias SelectoPostgrexMix.Connection
@@ -67,7 +67,7 @@ defmodule SelectoPostgrexMix.SqlRunner do
 
     results =
       Enum.map(statements, fn stmt ->
-        case Postgrex.query(conn, stmt, []) do
+        case postgresql_adapter().execute(conn, stmt, [], prepared: false) do
           {:ok, result} -> {:ok, result}
           {:error, error} -> {:error, label, error}
         end
@@ -80,5 +80,9 @@ defmodule SelectoPostgrexMix.SqlRunner do
     else
       List.first(errors)
     end
+  end
+
+  defp postgresql_adapter do
+    Module.concat(["SelectoDBPostgreSQL", "Adapter"])
   end
 end
