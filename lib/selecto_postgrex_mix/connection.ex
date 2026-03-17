@@ -29,6 +29,8 @@ defmodule SelectoPostgrexMix.Connection do
 
   require Logger
 
+  alias SelectoMix.Connection, as: SharedConnection
+
   @doc """
   Parse a PostgreSQL database URL into connection options.
 
@@ -41,37 +43,8 @@ defmodule SelectoPostgrexMix.Connection do
       [hostname: "host", port: 5432, database: "db", username: "user", password: "pass"]
   """
   def parse_database_url(url) when is_binary(url) do
-    uri = URI.parse(url)
-
-    {username, password} =
-      case uri.userinfo do
-        nil ->
-          {nil, nil}
-
-        info ->
-          case String.split(info, ":", parts: 2) do
-            [user] -> {user, nil}
-            [user, pass] -> {user, pass}
-          end
-      end
-
-    database =
-      case uri.path do
-        nil -> nil
-        "/" -> nil
-        "/" <> db -> db
-      end
-
-    opts = [
-      hostname: uri.host || "localhost",
-      port: uri.port || 5432,
-      database: database,
-      username: username,
-      password: password
-    ]
-
-    # Filter out nil values
-    Enum.reject(opts, fn {_k, v} -> is_nil(v) end)
+    SharedConnection.parse_database_url(url)
+    |> Keyword.put_new(:port, 5432)
   end
 
   @doc """
@@ -95,29 +68,14 @@ defmodule SelectoPostgrexMix.Connection do
   """
   def connect(opts \\ []) do
     conn_opts = resolve_connection_opts(opts)
-
-    case Application.ensure_all_started(:postgrex) do
-      {:ok, _started_apps} ->
-        case Postgrex.start_link(conn_opts) do
-          {:ok, pid} ->
-            {:ok, pid}
-
-          {:error, reason} ->
-            {:error, {:connection_failed, reason}}
-        end
-
-      {:error, reason} ->
-        {:error, {:postgrex_start_failed, reason}}
-    end
+    SharedConnection.connect(postgresql_adapter(), conn_opts)
   end
 
   @doc """
   Disconnect from the database.
   """
   def disconnect(conn) when is_pid(conn) do
-    GenServer.stop(conn, :normal)
-  catch
-    :exit, _ -> :ok
+    SharedConnection.disconnect(conn)
   end
 
   def disconnect(_), do: :ok
@@ -140,16 +98,13 @@ defmodule SelectoPostgrexMix.Connection do
       )
   """
   def with_connection(opts \\ [], fun) when is_function(fun, 1) do
-    case connect(opts) do
-      {:ok, conn} ->
-        try do
-          fun.(conn)
-        after
-          disconnect(conn)
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    case SharedConnection.with_connection(
+           postgresql_adapter(),
+           resolve_connection_opts(opts),
+           fun
+         ) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -194,6 +149,10 @@ defmodule SelectoPostgrexMix.Connection do
           4. Configure ecto_repos + Repo config in your current Mix project
         """
     end
+  end
+
+  defp postgresql_adapter do
+    Module.concat(["SelectoDBPostgreSQL", "Adapter"])
   end
 
   defp repo_connection_opts_from_current_project do
