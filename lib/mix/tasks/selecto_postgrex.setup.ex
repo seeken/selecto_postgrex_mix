@@ -128,7 +128,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Setup do
   defp run_all_files(conn_opts, sql_dir) do
     unless File.dir?(sql_dir) do
       {:error,
-       "SQL directory not found: #{sql_dir}. Run a gen task first (e.g., mix selecto_postgrex.gen.saved_views)"}
+       "SQL directory not found: #{sql_dir}. Run a gen task first (e.g., mix selecto.gen.saved_views MyApp --adapter postgresql)"}
     else
       case SqlRunner.run_sql_directory(sql_dir, conn_opts: conn_opts) do
         {:ok, :no_files} ->

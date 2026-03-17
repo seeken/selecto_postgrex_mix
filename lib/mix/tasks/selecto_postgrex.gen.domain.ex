@@ -663,7 +663,9 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
     else
       IO.puts("\nGenerating SavedViews implementation...")
 
-      case System.cmd("mix", ["selecto_postgrex.gen.saved_views", app_name_string, "--yes"],
+      case System.cmd(
+             "mix",
+             ["selecto.gen.saved_views", app_name_string, "--adapter", "postgresql", "--yes"],
              stderr_to_stdout: true
            ) do
         {output, 0} ->
@@ -676,7 +678,7 @@ defmodule Mix.Tasks.SelectoPostgrex.Gen.Domain do
           Igniter.add_warning(igniter, """
           Failed to auto-generate saved views. Please run manually:
 
-              mix selecto_postgrex.gen.saved_views #{app_name_string}
+              mix selecto.gen.saved_views #{app_name_string} --adapter postgresql
           """)
       end
     end
