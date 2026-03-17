@@ -2,9 +2,11 @@ defmodule SelectoPostgrexMix do
   @moduledoc """
   Mix tasks for Selecto domain generation via direct Postgrex introspection.
 
-  SelectoPostgrexMix provides the same domain generation capabilities as SelectoMix
-  but works directly with PostgreSQL databases via Postgrex, without requiring Ecto
-  schemas. This makes it suitable for:
+  SelectoPostgrexMix provides PostgreSQL-oriented compatibility tasks during the
+  consolidation into `selecto_mix`.
+
+  Domain generation now routes through the shared `selecto_mix` flow where possible,
+  while PostgreSQL-specific compatibility wrappers remain available for:
 
   - Projects that don't use Ecto
   - Generating domains from existing databases
@@ -18,10 +20,10 @@ defmodule SelectoPostgrexMix do
   - `mix selecto_postgrex.gen.filter_sets` - Generate filter sets infrastructure
   - `mix selecto_postgrex.gen.saved_view_configs` - Generate view configs infrastructure
   - `mix selecto_postgrex.install` - Install Selecto Postgrex dependencies
-  - `mix selecto_postgrex.components.integrate` - Integrate SelectoComponents assets/hooks
-  - `mix selecto_postgrex.gen.live_dashboard` - Generate LiveDashboard metrics page
-  - `mix selecto_postgrex.gen.parameterized_join` - Generate parameterized join templates
-  - `mix selecto_postgrex.validate.parameterized_joins` - Validate parameterized join configs
+  - `mix selecto_postgrex.components.integrate` - Compatibility wrapper to shared assets integration
+  - `mix selecto_postgrex.gen.live_dashboard` - Compatibility wrapper to shared dashboard generation
+  - `mix selecto_postgrex.gen.parameterized_join` - Compatibility wrapper to shared parameterized join generation
+  - `mix selecto_postgrex.validate.parameterized_joins` - Compatibility wrapper to shared parameterized join validation
   - `mix selecto_postgrex.setup` - Run generated SQL files
   - `mix selecto_postgrex.add_timeouts` - Configure query timeouts
 
