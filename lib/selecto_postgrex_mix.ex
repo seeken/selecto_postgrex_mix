@@ -24,7 +24,7 @@ defmodule SelectoPostgrexMix do
   - `mix selecto_postgrex.gen.live_dashboard` - Compatibility wrapper to shared dashboard generation
   - `mix selecto_postgrex.gen.parameterized_join` - Compatibility wrapper to shared parameterized join generation
   - `mix selecto_postgrex.validate.parameterized_joins` - Compatibility wrapper to shared parameterized join validation
-  - `mix selecto_postgrex.setup` - Run generated SQL files
+  - `mix selecto_postgrex.setup` - Compatibility wrapper to `mix selecto.setup --adapter postgresql`
   - `mix selecto_postgrex.add_timeouts` - Configure query timeouts
 
   ## Getting Started
